@@ -26,6 +26,55 @@ To be able to use this project, several assumptions are made regarding your setu
   * Edit the file and add ***auth_id*** and ***password*** in the relevant sections
   * (Optional) Define which IP should be the master IP that ClouDNS talks to. If left blank, the script will try to determine it automagically.
   * Enjoy!
+
+# Syncing existing domains
+
+The EventListener only handles domains created **after** installation. To sync
+domains that already exist in Plesk, use the included `sync.php` script.
+
+## Prerequisites
+
+You need a Plesk API key. Create one under **Tools & Settings → API Keys** in the
+Plesk admin panel. The key needs at minimum read access to domains.
+
+## Usage
+
+1. Open `sync.php` and fill in the four configuration variables at the top:
+
+   ```php
+   $pleskHost   = 'plesk.example.com';  // your Plesk hostname or IP
+   $pleskApiKey = 'YOUR_API_KEY';       // Plesk API key
+   $clouDnsAuthId  = '12345';           // ClouDNS auth-id
+   $clouDnsAuthKey = 'secret';          // ClouDNS auth-password
+   $masterIp    = '1.2.3.4';           // (optional) master IP for zone transfers
+   ```
+
+2. Do a dry run to verify which domains will be synced:
+
+   ```bash
+   php sync.php --dry-run
+   ```
+
+3. Run for real:
+
+   ```bash
+   php sync.php
+   ```
+
+## PleskClient
+
+`PleskClient.php` is a standalone Plesk REST API client (Plesk 17.8+). It can
+be reused in your own scripts:
+
+```php
+require_once 'PleskClient.php';
+
+$plesk = new PleskClient('plesk.example.com', 'YOUR_API_KEY');
+
+if ($plesk->testConnection()) {
+    $domains = $plesk->getDomains(); // returns array of domain name strings
+}
+```
   
 # Basic troubleshooting
 - In ClouDNS, your API user has **ALL** (read: both IPv4 and IPv6) IPs allowed, not just your primary.

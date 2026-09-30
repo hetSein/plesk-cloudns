@@ -17,10 +17,18 @@
 class ClouDnsSlaveManager implements EventListener
 {
   // Get your API user settings in https://www.cloudns.net/api-settings/
-  private $authid   = ''; // Add your API auth-id
-  private $authkey  = ''; // Add your API auth-key
-  private $masterip = ''; // (Optional) Add your server primary ip here (ClouDNS will talk with this IP)
-  private $baseurl  = 'https://api.cloudns.net/'; 
+  // Set these via environment variables or define them in a separate config file
+  // outside the webroot, never hardcode credentials here.
+  private $authid;
+  private $authkey;
+  private $masterip;
+  private $baseurl = 'https://api.cloudns.net/';
+
+  public function __construct() {
+    $this->authid   = getenv('CLOUDNS_AUTH_ID')  ?: '';
+    $this->authkey  = getenv('CLOUDNS_AUTH_KEY') ?: '';
+    $this->masterip = getenv('CLOUDNS_MASTER_IP') ?: '';
+  }
 
   /**
    * @see https://docs.plesk.com/en-US/onyx/extensions-guide/plesk-features-available-for-extensions/subscribe-to-plesk-events.71093/
@@ -70,16 +78,21 @@ class ClouDnsSlaveManager implements EventListener
    * @return void
    */
   private function addSlave($zone) {
+    if (!$this->isValidDomain($zone)) {
+      error_log('ClouDNS: invalid domain name rejected: ' . $zone);
+      return;
+    }
+
     $params = array(
      'domain-name' => $zone,
      'zone-type'   => 'slave',
      'master-ip'   => $this->masterip,
-    );  
+    );
 
     $response = $this->apiCall('dns/register.json', $params);
 
-    if($response['status'] == 'Failed') {
-     error_log('Failed to create '.$zone.' with message '.$response['statusDescription']);
+    if ($response === null || $response['status'] == 'Failed') {
+     error_log('Failed to create ' . $zone . ' with message ' . ($response['statusDescription'] ?? 'unknown error'));
     }
   }
 
@@ -91,15 +104,23 @@ class ClouDnsSlaveManager implements EventListener
    * @return void
    */
   private function delSlave($zone) {
+    if (!$this->isValidDomain($zone)) {
+      error_log('ClouDNS: invalid domain name rejected: ' . $zone);
+      return;
+    }
+
     $params = array(
       'domain-name' => $zone
     );
     $response = $this->apiCall('dns/delete.json', $params);
 
-    if($response['status'] == 'Failed') {
-      error_log('Failed to delete '.$zone.' with message '.$response['statusDescription']);
+    if ($response === null || $response['status'] == 'Failed') {
+      error_log('Failed to delete ' . $zone . ' with message ' . ($response['statusDescription'] ?? 'unknown error'));
     }
-  
+  }
+
+  private function isValidDomain($domain) {
+    return (bool) preg_match('/^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/', $domain);
   }
 
   /**
@@ -125,8 +146,17 @@ class ClouDnsSlaveManager implements EventListener
     curl_setopt($init, CURLOPT_URL,            $url);
     curl_setopt($init, CURLOPT_POST,           true);
     curl_setopt($init, CURLOPT_POSTFIELDS,     http_build_query($params));
+    curl_setopt($init, CURLOPT_SSL_VERIFYPEER, true);
+    curl_setopt($init, CURLOPT_SSL_VERIFYHOST, 2);
 
     $content = curl_exec($init);
+
+    if ($content === false) {
+      error_log('ClouDNS: cURL error: ' . curl_error($init));
+      curl_close($init);
+      return null;
+    }
+
     curl_close($init);
     return json_decode($content, true);
   }
